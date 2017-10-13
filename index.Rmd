@@ -1,0 +1,195 @@
+---
+title: "Homicide_Reports"
+author: "Deepak Kumar G S"
+date: "October 12, 2017"
+output:
+    html_document: 
+        fig_height: 7
+        fig_width: 10
+        theme: journal
+        highlight: textmate
+        toc: yes
+  
+---
+
+# Introduction
+
+* This dataset includes murders from the FBI's Supplementary Homicide Report from 1976 to the present and Freedom of Information Act data on more than 22,000 homicides that were not reported to the Justice Department.This dataset includes the age, race, sex, ethnicity of victims and perpetrators,in addition to the relationship between the victim and perpetrator and weapon used.
+
+* We try to answer few questions from this dataset like,what is the trend of homicide over the years,most used weapon for killing,which age group is susceptable to killing, among other interesting things explored.
+
+
+# Loading libraries and data
+
+```{r,warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(formattable)
+library(ggthemes)
+library(gridExtra)
+homi=read.csv("database.csv",header=TRUE,stringsAsFactors = FALSE)
+glimpse(homi)
+```
+
+
+There are 638454 observations with 24 variables.
+
+# Crime rate by %
+
+```{r}
+dim(homi)
+table(homi$Crime.Type)
+(table(homi$Crime.Type[homi$Crime.Type=="Murder or
+                       Manslaughter"])/length(homi$Crime.Type))
+table(homi$Crime.Solved)
+(table(homi$Crime.Solved[homi$Crime.Solved=="Yes"])/length(homi$Crime.Solved))
+temp=homi %>% select(Crime.Solved,Crime.Type) %>% filter(Crime.Solved=="Yes",Crime.Type=="Murder or Manslaughter")
+table(temp)
+439444/629338
+temp=homi %>% select(Crime.Solved,Crime.Type) %>% filter(Crime.Solved=="Yes",Crime.Type=="Manslaughter by Negligence")
+table(temp)
+8728/9116
+
+```
+
+> almost 98 % of the crimes belong to murder or manslaughter type.
+
+> 70 % of the total crimes registered have been solved.
+
+> 69 % of the cases under Murder or Manslaugher have been solved.While 95 % of the cases under Manslaughter by negligence has been solved.
+
+# Agency Type
+
+```{r}
+temp= homi %>% select(Agency.Type) %>% group_by(Agency.Type) %>% summarise(count=n()) %>% mutate(perc=round((count/sum(count))*100)) %>% arrange(desc(perc))
+temp%>% select(Agency.Type,perc) %>% formattable(list(perc=color_bar("red")),align='l')
+```
+
+> 77 % of the crimes are handled by Municipal Police.
+
+We declare a function for default theme that we will use through out this kernel.
+
+```{r}
+themefu=function(){theme(text=element_text(color="red"),plot.title=element_text(size=12,color="black",hjust=0.5),plot.subtitle=element_text(face="italic"),axis.title.x=element_text(hjust=1),axis.title.y=element_text(hjust=1),legend.background = element_blank(),legend.title=element_text(color="black",face="bold"),legend.text=element_text(color="black",face="bold"))}
+```
+
+# Analysing monthly crime types:
+
+```{r}
+ggplot(homi,aes(Month,fill=Month))+geom_bar(stat="count",show.legend="na")+labs(x="Month of Crime",y="Count of Crime",caption="Source:FBI's homicide Report",title="Murder Trend by month")+facet_wrap(~Crime.Type)+scale_y_continuous(limits=c(0,60000),breaks=seq(0,60000,5000))+themefu()+theme(axis.text.x=element_text(angle=90,vjust=1))
+```
+
+Not a surprise since,the dataset is dominated by Murder or Manslaughter than Murder by negligence.July seems to have a spike in the overall crime rate going by the graph.Therefore lets take into consideration only Murder or Manslaughter when ploting the time series trend.
+
+# Time Series data
+
+```{r,fig.width=10,fig.height=8}
+temp=homi %>% select(Year,Crime.Type) %>% group_by(Year,Crime.Type) %>% summarise(count=n()) %>% na.omit()
+ggplot(temp,aes(Year,count,group=Crime.Type,color=Crime.Type))+geom_line()+geom_point(size=2,shape=1)+theme_hc(bgcolor="darkunica")+scale_fill_hc("darkunica")+labs(x="Year",y="Count",caption="Source:FBI's homicide report",title="Crime trend over the years")+geom_text(aes(label=ifelse(count>250,count,"")), size=3,hjust=1.8)+scale_x_continuous(limits=c(1980,2014),breaks=seq(1980,2014,2))
+```
+
+
+
+The crimes seems to have dropped  in 2010 compared to 1980's which is a good trend.
+
+Now,let us examine the variable victim sex and preparator sex.
+
+#Sex
+
+```{r}
+unique(homi$Victim.Sex)
+temp=homi %>% select(Victim.Sex,Perpetrator.Sex) 
+temp=temp %>% mutate(whokilledwho=case_when(.$Victim.Sex=="Male" & .$Perpetrator.Sex=="Male"~"Male killed by male",.$Victim.Sex=="Male" & .$Perpetrator.Sex=="Female"~"Male killed by female",.$Victim.Sex=="Male" & .$Perpetrator.Sex=="Unknown"~"Male killed by unknown",.$Victim.Sex=="Female" & .$Perpetrator.Sex=="Male"~"Female killed by male",.$Victim.Sex=="Female" & .$Perpetrator.Sex=="Female"~"Female killed by female",.$Victim.Sex=="Female" & .$Perpetrator.Sex=="Unknown"~"Female killed by unknown",.$Victim.Sex=="Unkown" & .$Perpetrator.Sex=="Male"~"Unknown killed by male",.$Victim.Sex=="Unknown" & .$Perpetrator.Sex=="Female"~"Unknown killed by female",TRUE~"Unknown killed by Unknown"))
+
+temp=temp %>% group_by(whokilledwho) %>% summarise(number=n()) %>% arrange(desc(number)) %>% mutate(perc=round(number/sum(number)*100))
+ggplot(temp,aes(whokilledwho,number,fill=whokilledwho))+geom_bar(stat="identity")+themefu()+labs(x=" ",y="Count",title="Victim Vs Preparator")+theme(axis.text.x = element_text(angle=90,vjust=0.5),legend.position="none")+geom_text(aes(label=number),vjust=0.7,color="black")
+temp %>% formattable(align=c("l","l","l"),list(perc=color_tile("orange","red"),area(col="number")~normalize_bar("lightgrey")))
+
+```
+
+> About 49 % of the crimes involved males being killed by males followed  25 % by unknown perpetrator.But the gap between them is quite large -around 24 %.
+
+Let us see,who how the perpetrator are related to the victim.For this we consider the solved crimes since they seem to dominate the data and hence the inference can be derived based on that data.
+
+#Relationship type
+
+```{r}
+temp=homi %>% filter(Crime.Solved=="Yes",!Victim.Sex=="Unknown",!Perpetrator.Sex=="Unknown")
+temp %>% ggplot(aes(Relationship,fill=Relationship))+geom_bar(stat="count")+themefu()+theme(axis.text.x = element_text(angle=90,vjust=0.5),legend.position="none")+labs(x="Relationship",y="Count",caption="Source:FBI's Homicide data",title="Relation between victim and Perpetrator",subtitle="x grid is Victim,y grid is Perpetrator")+facet_grid(Victim.Sex ~ Perpetrator.Sex,scales="free_y")
+```
+
+
+> Since 49 % of the crimes involved males,there is a high dominance of Male Vs Male and Male Vs Female.
+
+> One revelation from this dataset is that males are more likely to be killed by their wife(!!) followed by their girlfriends if the perpetrator turns out to be female while if the perpetrator is male,then it would either be his acquaintaince or a stranger.
+
+Let us examine which weapons are used for killing based on the victim and perpetrator sex.
+
+# Weapons used
+
+```{r}
+length(unique(homi$Weapon))
+ggplot(temp,aes(Weapon,fill=Weapon))+geom_bar(stat="count")+themefu()+facet_grid(Victim.Sex~Perpetrator.Sex,scales="free_y")+labs(x="Weapons Used",y="Count",title="Weapon used by Perpetrator",subtitle="xgrid=Victim,ygrid=Perpetrator")+theme(axis.text.x = element_text(angle=90,vjust=0.5),legend.position="None")
+```
+
+
+> Hand gun seems to be the preferred weapon to kill the Males.This is not surprising given the prevelance of widespread gun culture in US.Blunt objects,Knife,shotgun are also prefered.
+
+# Age of the victim and perpetrator
+
+```{r}
+min(temp$Victim.Age)
+max(temp$Victim.Age)
+```
+
+There seems to be a discrepancy in the data since the min and max age is 0 and 998.
+
+```{r}
+temp=homi %>% select(Victim.Age,Perpetrator.Age) %>% group_by(Victim.Age,Perpetrator.Age) %>% mutate(count=n())
+head(temp,20) %>% formattable(align=c("l","l","l"),list(count=color_tile("green","red")))
+```
+
+
+A look at the first 20 rows in the table indicate that the discrepancy in the age data is prevalent in victims and perpetrators.Therefore to get a better sense of data we filter the data above 18 years of age.
+
+```{r}
+temp = temp %>% filter(Victim.Age>=18 & Perpetrator.Age >=18 ) %>% group_by(Victim.Age,Perpetrator.Age) %>% summarise(n=sum(count))
+temp1=temp %>% arrange(desc(n))
+g1=ggplot(head(temp1,20),aes(Victim.Age,n))+geom_bar(stat="identity")+theme(legend.position="none")+labs(x="Victim Age",y="Count",title="Victim age distribution",subtitle="TOP 20 by count")+scale_x_continuous(limits=c(18,26),breaks=seq(18,26,1))+scale_fill_canva(palette="Fresh and bright")
+g2=ggplot(head(temp1,20),aes(Perpetrator.Age,n,fill="darkgreen"))+geom_bar(stat="identity")+theme(legend.position="none")+labs(x="Perpetrator Age",y="Count",title="Perpetrator age distribution",subtitle="TOP 20 by count")+scale_x_continuous(limits=c(18,26),breaks=seq(18,26,1))
+grid.arrange(arrangeGrob(g1,g2,ncol=2))
+
+```
+
+It is seen that the top 20 of the age data indicates that both victim and perpetrator between age group 18-26 are vulnerable to homicide death's and for victims aged 19 years are more vulnerable.
+
+# Race - Which race is more vulnerable
+
+```{r}
+length(unique(homi$Victim.Race))
+length(unique(homi$Perpetrator.Race))
+temp=homi %>% select(Victim.Race,Perpetrator.Race) %>% group_by(Victim.Race,Perpetrator.Race) %>% summarise(count=n())
+
+ggplot(temp,aes(Victim.Race,count))+geom_bar(stat="identity")+theme_solarized()+facet_wrap(~Perpetrator.Race,scales="free_y")+labs(x="Victim Race",y="Count",title="Crime trend by Race",subtitle="Which race is most vulnerable?")+theme(legend.position="none",axis.text.x = element_text(angle=90,vjust=0.5))+scale_color_solarized('lightyellow')
+```
+
+
+# State and Crime Rate
+
+```{r}
+length(unique(homi$State))
+temp=homi %>% group_by(State) %>% summarise(count=n()) %>% arrange(desc(count)) %>% mutate(perc=round((count/sum(count))*100,2))
+ggplot(head(temp,10),aes(factor(State,levels=State),count,fill=State))+geom_bar(stat="identity")+theme_hc()+scale_fill_hc()+geom_text(aes(label=count),color="black",vjust=1)+theme(axis.text.x=element_text(angle=90,vjust=0.5),legend.position="none")+labs(x="State",y="Count",title=" Total Crimes in City",subtitle="Top 10")
+head(temp,20) %>% select(State,perc) %>% formattable(align=c("l","l"),list(perc=color_bar("pink")))
+
+```
+
+
+Over the years,(from 1980 to 2014),California,Texas,New York,Florida,Michigan has topped the homicide crime.This accounts for almost 50 % of the crimes.
+
+# Conclusion
+
+* Thus in this project we have tried to explore the homicide dataset that has 24 variables.We have done the exploratory data analysis using univariate,bivariate datas and tried to gather interesting insights.
+
+* We have extensively made use of packages like ggplot2 and dplyr through out this project and also explored the usage of formattable,ggthemes packages.
+
